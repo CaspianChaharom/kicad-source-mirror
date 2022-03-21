@@ -185,4 +185,6 @@ bool IsActionRunning();
 bool WriteDRCReport( BOARD* aBoard, const wxString& aFileName, EDA_UNITS aUnits,
                      bool aReportAllTrackErrors );
 
+std::vector< int > run_DRC( BOARD* aBoard, EDA_UNITS aUnits, bool aReportAllTrackErrors );
+
 #endif      // __PCBNEW_SCRIPTING_HELPERS_H

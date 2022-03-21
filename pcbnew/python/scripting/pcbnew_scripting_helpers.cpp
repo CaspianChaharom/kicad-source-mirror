@@ -554,3 +554,79 @@ bool WriteDRCReport( BOARD* aBoard, const wxString& aFileName, EDA_UNITS aUnits,
 
     return true;
 }
+
+
+
+
+std::vector< int > run_DRC( BOARD* aBoard, EDA_UNITS aUnits, bool aReportAllTrackErrors ){
+    //wxCHECK( aBoard, false );
+
+    BOARD_DESIGN_SETTINGS& bds = aBoard->GetDesignSettings();
+    std::shared_ptr<DRC_ENGINE> engine = bds.m_DRCEngine;
+
+    if( !engine )
+    {
+        bds.m_DRCEngine = std::make_shared<DRC_ENGINE>( aBoard, &bds );
+        engine = bds.m_DRCEngine;
+    }
+
+    //wxCHECK( engine, false );
+
+    wxFileName fn = aBoard->GetFileName();
+    fn.SetExt( DesignRulesFileExtension );
+    PROJECT* prj = nullptr;
+
+    if( aBoard->GetProject() )
+        prj = aBoard->GetProject();
+    else if( s_SettingsManager )
+        prj = &s_SettingsManager->Prj();
+
+    //wxCHECK( prj, false );
+
+    wxString drcRulesPath = prj->AbsolutePath( fn.GetFullName() );
+
+    try
+    {
+        engine->InitEngine( drcRulesPath );
+    }
+    catch( PARSE_ERROR& )
+    {
+        std::cout << "ERROR here" ;//return false;
+    }
+
+    std::vector<std::shared_ptr<DRC_ITEM>> footprints;
+    std::vector<std::shared_ptr<DRC_ITEM>> unconnected;
+    std::vector<std::shared_ptr<DRC_ITEM>> violations;
+
+    engine->SetProgressReporter( nullptr );
+
+    engine->SetViolationHandler(
+            [&]( const std::shared_ptr<DRC_ITEM>& aItem, VECTOR2D aPos, PCB_LAYER_ID aLayer )
+            {
+                if(    aItem->GetErrorCode() == DRCE_MISSING_FOOTPRINT
+                    || aItem->GetErrorCode() == DRCE_DUPLICATE_FOOTPRINT
+                    || aItem->GetErrorCode() == DRCE_EXTRA_FOOTPRINT
+                    || aItem->GetErrorCode() == DRCE_NET_CONFLICT )
+                {
+                    footprints.push_back( aItem );
+                }
+                else if( aItem->GetErrorCode() == DRCE_UNCONNECTED_ITEMS )
+                {
+                    unconnected.push_back( aItem );
+                }
+                else
+                {
+                    violations.push_back( aItem );
+                }
+            } );
+
+    engine->RunTests( aUnits, aReportAllTrackErrors, false );
+    engine->ClearViolationHandler();
+
+    // TODO: DRC violations, unconnected pads, and footprint errors are available
+    std::vector<int> a;
+    a.push_back(static_cast<int>( violations.size() ));
+    a.push_back(static_cast<int>( unconnected.size() ));
+    a.push_back(static_cast<int>( footprints.size() ));
+    return a;
+}
